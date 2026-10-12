@@ -8,6 +8,7 @@ const ITEMS = [
   { id: "sofa-3", label: "โซฟาเล็ก", num: "3", type: "sofa", c: [1, 3], r: [4, 6] },
   { id: "sofa-2", label: "โซฟาเล็ก", num: "2", type: "sofa", c: [1, 3], r: [6, 8] },
   { id: "sofa-1", label: "โซฟาเล็ก", num: "1", type: "sofa", c: [1, 3], r: [8, 10] },
+  { id: "sofa-4", label: "โซฟาเล็ก", num: "4", type: "sofa", c: [3, 4], r: [11, 12] },
   { id: "sofa-big", label: "โซฟาใหญ่", num: "", type: "sofa", c: [1, 4], r: [13, 15] },
 
   { id: "round-8", label: "โต๊ะกลม", num: "8", type: "round", c: [4, 5], r: [3, 4] },

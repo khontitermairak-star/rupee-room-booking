@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { supabase } from "./supabaseClient";
 
 /* ---------------------------------------------------------
-   ห้องเอนกประสงค์คณะรัฐศาสตร์และนิติศาสตร์ ม.บูรพา — ระบบจองที่นั่ง (v2)
+   ห้องเอนกประสงค์คณะรัฐศาสตร์ ม.บูรพา — ระบบจองที่นั่ง (v2)
 --------------------------------------------------------- */
 const ITEMS = [
   { id: "sofa-3", label: "โซฟาเล็ก", num: "3", type: "sofa", c: [1, 3], r: [4, 6] },
@@ -397,7 +397,7 @@ export default function App() {
         <div className="topbar-title">
           <span className="serif">ระบบจองที่นั่ง</span>
           <span className="mono" style={{ fontSize: 12, color: "var(--muted)" }}>
-            ห้องเอนกประสงค์ คณะรัฐศาสตร์และนิติศาสตร์ ม.บูรพา
+            ห้องเอนกประสงค์ คณะรัฐศาสตร์ ม.บูรพา
           </span>
         </div>
         <div className="clock">

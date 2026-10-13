@@ -77,6 +77,16 @@ const toMin = (hm) => {
   return h * 60 + m;
 };
 const overlaps = (aS, aE, bS, bE) => toMin(aS) < toMin(bE) && toMin(bS) < toMin(aE);
+
+// รหัสผ่านผู้ดูแลสำหรับปุ่ม "ล้างข้อมูลการจองทั้งหมด" (แก้เปลี่ยนได้ที่บรรทัดนี้)
+const CLEAR_PASSWORD = "687786";
+// ต้องกดยืนยันการมาถึงภายในกี่นาทีหลังเวลาจองเริ่ม
+const GRACE_MIN = 10;
+const startDateOf = (b) => new Date(`${b.date}T${b.start}:00`);
+// เส้นตายการยืนยัน = เวลาเริ่มจอง (หรือเวลาที่กดจอง ถ้ากดจองหลังเวลาเริ่มไปแล้ว) + 10 นาที
+const deadlineOf = (b) =>
+  new Date(Math.max(startDateOf(b).getTime(), new Date(b.createdAt).getTime()) + GRACE_MIN * 60000);
+const isExpired = (b, nowDate) => !b.confirmed && nowDate > deadlineOf(b);
 const fmtDate = (iso) => {
   const d = new Date(iso + "T00:00:00");
   const days = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
@@ -104,6 +114,7 @@ const rowToBooking = (row) => ({
   end: row.end_time,
   name: row.name,
   code: row.code,
+  confirmed: row.confirmed !== false,
   note: row.note || "",
   createdAt: row.created_at,
 });
@@ -120,9 +131,12 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
-  const [cancelingId, setCancelingId] = useState(null);
-  const [cancelCode, setCancelCode] = useState("");
-  const [cancelError, setCancelError] = useState("");
+  const [clearPassword, setClearPassword] = useState("");
+  const [clearError, setClearError] = useState("");
+  const [action, setAction] = useState(null); // { id, type: "cancel" | "confirm" }
+  const [actionCode, setActionCode] = useState("");
+  const [actionError, setActionError] = useState("");
+  const reapRef = useRef(false);
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -153,17 +167,38 @@ export default function App() {
   const todayNow = todayStr();
   const nowHMs = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
+  // การจองที่ยังไม่ยืนยันและเลยเส้นตายแล้ว ถือว่าหมดอายุ: ซ่อนทันที และถูกลบออกจากฐานข้อมูลอัตโนมัติ
+  const visibleBookings = useMemo(() => bookings.filter((b) => !isExpired(b, now)), [bookings, now]);
+
+  useEffect(() => {
+    const expired = bookings.filter((b) => isExpired(b, now));
+    if (expired.length === 0 || reapRef.current) return;
+    reapRef.current = true;
+    supabase
+      .from("bookings")
+      .delete()
+      .in("id", expired.map((b) => b.id))
+      .eq("confirmed", false)
+      .then(({ error }) => {
+        if (!error) load();
+      })
+      .finally(() => {
+        reapRef.current = false;
+      });
+  }, [bookings, now, load]);
+
   const liveBookingFor = useCallback(
     (itemId) =>
-      bookings.find(
+      visibleBookings.find(
         (b) => b.itemId === itemId && b.date === todayNow && toMin(b.start) <= toMin(nowHMs) && toMin(nowHMs) < toMin(b.end)
       ),
-    [bookings, todayNow, nowHMs]
+    [visibleBookings, todayNow, nowHMs]
   );
 
   const nextBookingFor = useCallback(
-    (itemId) => bookings.filter((b) => b.itemId === itemId && b.date === bookDate).sort((a, b) => toMin(a.start) - toMin(b.start)),
-    [bookings, bookDate]
+    (itemId) =>
+      visibleBookings.filter((b) => b.itemId === itemId && b.date === bookDate).sort((a, b) => toMin(a.start) - toMin(b.start)),
+    [visibleBookings, bookDate]
   );
 
   const openItem = (item) => {
@@ -171,14 +206,14 @@ export default function App() {
     const s = roundedNow();
     setForm({ name: "", code: "", note: "", start: s, end: plusHour(s) });
     setFormError("");
-    setCancelingId(null);
+    setAction(null);
   };
   const closeModal = () => {
     setSelected(null);
     setFormError("");
-    setCancelingId(null);
-    setCancelCode("");
-    setCancelError("");
+    setAction(null);
+    setActionCode("");
+    setActionError("");
   };
 
   const submitBooking = async () => {
@@ -188,7 +223,7 @@ export default function App() {
     if (!name) return setFormError("กรุณาใส่ชื่อผู้จอง");
     if (!code) return setFormError("กรุณาใส่รหัสนิสิต (ใช้เป็นรหัสผ่านสำหรับยกเลิกภายหลัง)");
     if (toMin(form.end) <= toMin(form.start)) return setFormError("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น");
-    const conflict = bookings.find(
+    const conflict = visibleBookings.find(
       (b) => b.itemId === selected.id && b.date === bookDate && overlaps(form.start, form.end, b.start, b.end)
     );
     if (conflict) return setFormError(`ช่วงเวลานี้ถูกจองแล้วโดย ${conflict.name} (${conflict.start}–${conflict.end})`);
@@ -219,27 +254,45 @@ export default function App() {
     closeModal();
   };
 
-  const startCancel = (id) => {
-    setCancelingId(id);
-    setCancelCode("");
-    setCancelError("");
+  const startAction = (id, type) => {
+    setAction({ id, type });
+    setActionCode("");
+    setActionError("");
   };
 
-  const confirmCancel = async (booking) => {
-    if (!cancelCode.trim()) return setCancelError("กรุณาใส่รหัสนิสิตที่ใช้ตอนจอง");
-    if (cancelCode.trim() !== booking.code) return setCancelError("รหัสไม่ถูกต้อง");
+  const doCancel = async (booking) => {
+    if (!actionCode.trim()) return setActionError("กรุณาใส่รหัสนิสิตที่ใช้ตอนจอง");
+    if (actionCode.trim() !== booking.code) return setActionError("รหัสไม่ถูกต้อง");
     await supabase.from("bookings").delete().eq("id", booking.id);
     await load();
-    setCancelingId(null);
-    setCancelCode("");
+    setAction(null);
+    setActionCode("");
     setToast("ยกเลิกการจองแล้ว");
     setTimeout(() => setToast(""), 2000);
   };
 
+  const doConfirm = async (booking) => {
+    if (!actionCode.trim()) return setActionError("กรุณาใส่รหัสนิสิตที่ใช้ตอนจอง");
+    if (actionCode.trim() !== booking.code) return setActionError("รหัสไม่ถูกต้อง");
+    const nowD = new Date();
+    if (nowD < startDateOf(booking)) return setActionError("ยังไม่ถึงเวลาจอง ยืนยันได้เมื่อถึงเวลาเริ่ม");
+    if (nowD > deadlineOf(booking)) return setActionError("หมดเวลายืนยันแล้ว การจองนี้จะถูกยกเลิกอัตโนมัติ");
+    const { error } = await supabase.from("bookings").update({ confirmed: true }).eq("id", booking.id);
+    if (error) return setActionError("บันทึกไม่สำเร็จ กรุณาลองใหม่");
+    await load();
+    setAction(null);
+    setActionCode("");
+    setToast("ยืนยันการมาถึงแล้ว");
+    setTimeout(() => setToast(""), 2000);
+  };
+
   const clearAll = async () => {
+    if (clearPassword !== CLEAR_PASSWORD) return setClearError("รหัสผ่านไม่ถูกต้อง");
     await supabase.from("bookings").delete().neq("id", "__none__");
     await load();
     setConfirmClear(false);
+    setClearPassword("");
+    setClearError("");
     setToast("ล้างข้อมูลการจองทั้งหมดแล้ว");
     setTimeout(() => setToast(""), 2000);
   };
@@ -247,17 +300,17 @@ export default function App() {
   const stats = useMemo(() => {
     const byName = {};
     const byItem = {};
-    bookings.forEach((b) => {
+    visibleBookings.forEach((b) => {
       const n = b.name.trim();
       byName[n] = (byName[n] || 0) + 1;
       byItem[b.itemLabel] = (byItem[b.itemLabel] || 0) + 1;
     });
     const topNames = Object.entries(byName).sort((a, b) => b[1] - a[1]).slice(0, 8);
     const topItems = Object.entries(byItem).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    const recent = [...bookings].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 20);
-    const todayCount = bookings.filter((b) => b.date === todayNow).length;
+    const recent = [...visibleBookings].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 20);
+    const todayCount = visibleBookings.filter((b) => b.date === todayNow).length;
     return {
-      total: bookings.length,
+      total: visibleBookings.length,
       uniqueUsers: Object.keys(byName).length,
       todayCount,
       topNames,
@@ -266,7 +319,7 @@ export default function App() {
       maxName: topNames.length ? topNames[0][1] : 1,
       maxItem: topItems.length ? topItems[0][1] : 1,
     };
-  }, [bookings, todayNow]);
+  }, [visibleBookings, todayNow]);
 
   const liveFreeCount = ITEMS.length - ITEMS.filter((it) => liveBookingFor(it.id)).length;
 
@@ -300,9 +353,9 @@ export default function App() {
         .tab-btn.active{ background:var(--panel2); color:var(--brass); border-color:var(--brass); }
         .toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 16px 4px; }
         .field-label{font-size:11px; color:var(--muted); display:block; margin-bottom:4px;}
-        input[type=date], input[type=time], input[type=text]{ background:var(--panel); border:1px solid var(--line);
+        input[type=date], input[type=time], input[type=text], input[type=password]{ background:var(--panel); border:1px solid var(--line);
           color:var(--ink); border-radius:8px; padding:8px 10px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
-        input[type=text]{font-family:'Noto Sans Thai'; font-size:14px;}
+        input[type=text], input[type=password]{font-family:'Noto Sans Thai'; font-size:14px;}
         input:focus{outline:2px solid var(--brass); outline-offset:1px;}
         .legend{ display:flex; gap:16px; padding:8px 16px 2px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
         .legend span{display:flex; align-items:center; gap:6px;}
@@ -358,6 +411,12 @@ export default function App() {
         .cancel-inline button{ border-radius:7px; border:none; font-size:11.5px; padding:6px 10px; cursor:pointer; font-weight:600; }
         .cancel-inline .go{background:var(--red); color:#fff;}
         .cancel-inline .no{background:transparent; border:1px solid var(--line); color:var(--muted);}
+        .cancel-inline .ok-go{background:var(--green); color:#fff;}
+        .row-actions{display:flex; gap:6px; flex-shrink:0;}
+        .exist-row-top button.ok{border-color:var(--green); color:var(--green-text);}
+        .status-line{font-size:11.5px; margin-top:3px; color:var(--muted);}
+        .status-line.ok{color:var(--green-text);}
+        .status-line.warn{color:var(--red-text);}
         .btn{ width:100%; padding:12px; border-radius:10px; border:none; cursor:pointer;
           font-family:'Noto Sans Thai'; font-weight:700; font-size:14.5px; margin-top:16px; }
         .btn.primary{background:var(--brass); color:#fff;}
@@ -437,14 +496,15 @@ export default function App() {
               </div>
             ))}
             {ITEMS.map((it) => {
-              const booked = !!liveBookingFor(it.id);
+              const live = liveBookingFor(it.id);
+              const booked = !!live;
               return (
                 <button key={it.id} className={`tile type-${it.type} ${booked ? "booked" : ""}`}
                   style={{ gridColumn: `${it.c[0]} / ${it.c[1]}`, gridRow: `${it.r[0]} / ${it.r[1]}` }}
                   onClick={() => openItem(it)}>
                   <span className="name">{it.label}</span>
                   {it.num && <span className="num">{it.num}</span>}
-                  <span className="tag">{booked ? "ไม่ว่าง" : "ว่าง"}</span>
+                  <span className="tag">{live ? (live.confirmed ? "ไม่ว่าง" : "รอยืนยัน") : "ว่าง"}</span>
                 </button>
               );
             })}
@@ -458,7 +518,8 @@ export default function App() {
             <div key={ty}>
               <div className="group-title">{TYPE_TH[ty]}</div>
               {ITEMS.filter((i) => i.type === ty).map((it) => {
-                const booked = !!liveBookingFor(it.id);
+                const live = liveBookingFor(it.id);
+                const booked = !!live;
                 const upcoming = nextBookingFor(it.id).length;
                 return (
                   <div className="row-item" key={it.id} onClick={() => openItem(it)}>
@@ -466,7 +527,7 @@ export default function App() {
                       <b>{it.label} {it.num}</b>
                       <small>{upcoming > 0 ? `${upcoming} รายการจองในวันที่เลือก` : "ยังไม่มีการจองในวันที่เลือก"}</small>
                     </div>
-                    <span className={`badge ${booked ? "r" : "g"}`}>{booked ? "ไม่ว่าง" : "ว่าง"}</span>
+                    <span className={`badge ${booked ? "r" : "g"}`}>{live ? (live.confirmed ? "ไม่ว่าง" : "รอยืนยัน") : "ว่าง"}</span>
                   </div>
                 );
               })}
@@ -525,10 +586,19 @@ export default function App() {
           )}
           {confirmClear && (
             <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--red-text)" }}>
-              ยืนยันการล้างข้อมูลการจองทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้
+              การล้างข้อมูลการจองทั้งหมดไม่สามารถย้อนกลับได้ — ใส่รหัสผ่านผู้ดูแลเพื่อยืนยัน
+              <input
+                type="password"
+                className="full"
+                style={{ marginTop: 8 }}
+                placeholder="รหัสผ่านผู้ดูแล"
+                value={clearPassword}
+                onChange={(e) => setClearPassword(e.target.value)}
+              />
+              {clearError && <div className="err">{clearError}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <button className="btn primary" style={{ margin: 0 }} onClick={clearAll}>ยืนยันล้างข้อมูล</button>
-                <button className="btn ghost" style={{ margin: 0 }} onClick={() => setConfirmClear(false)}>ยกเลิก</button>
+                <button className="btn ghost" style={{ margin: 0 }} onClick={() => { setConfirmClear(false); setClearPassword(""); setClearError(""); }}>ยกเลิก</button>
               </div>
             </div>
           )}
@@ -560,7 +630,7 @@ export default function App() {
             <label>
               <span className="field-label">รหัสนิสิต (ใช้เป็นรหัสผ่านยกเลิกการจอง) *</span>
               <input className="full" type="text" placeholder="เช่น 65xxxxxxxx" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} />
-              <div className="hint">โปรดจำรหัสนี้ไว้ — ต้องใช้ยืนยันตัวตนหากต้องการยกเลิกการจองภายหลัง</div>
+              <div className="hint">โปรดจำรหัสนี้ไว้ — ใช้ยืนยันการมาถึงและยกเลิกการจอง ต้องกดยืนยันการมาถึงภายใน {GRACE_MIN} นาทีหลังเวลาเริ่ม ไม่เช่นนั้นการจองจะถูกยกเลิกอัตโนมัติ</div>
             </label>
 
             <label>
@@ -578,27 +648,52 @@ export default function App() {
             {nextBookingFor(selected.id).length > 0 && (
               <div className="existing-list">
                 <div className="h">รายการจองของที่นั่งนี้ ในวันที่ {fmtDate(bookDate)}</div>
-                {nextBookingFor(selected.id).map((b) => (
-                  <div className="exist-row" key={b.id}>
-                    <div className="exist-row-top">
-                      <span>{b.start}–{b.end} · {b.name}{b.note ? ` (${b.note})` : ""}</span>
-                      {cancelingId !== b.id && <button onClick={() => startCancel(b.id)}>ยกเลิก</button>}
-                    </div>
-                    {cancelingId === b.id && (
-                      <div className="cancel-inline">
-                        <input
-                          type="text"
-                          placeholder="ใส่รหัสนิสิตที่ใช้ตอนจอง"
-                          value={cancelCode}
-                          onChange={(e) => setCancelCode(e.target.value)}
-                        />
-                        <button className="go" onClick={() => confirmCancel(b)}>ยืนยันยกเลิก</button>
-                        <button className="no" onClick={() => { setCancelingId(null); setCancelError(""); }}>ไม่ยกเลิก</button>
+                {nextBookingFor(selected.id).map((b) => {
+                  const st = startDateOf(b);
+                  const dl = deadlineOf(b);
+                  const inWindow = !b.confirmed && now >= st && now <= dl;
+                  const minsLeft = Math.max(0, Math.ceil((dl - now) / 60000));
+                  return (
+                    <div className="exist-row" key={b.id}>
+                      <div className="exist-row-top">
+                        <span>{b.start}–{b.end} · {b.name}{b.note ? ` (${b.note})` : ""}</span>
+                        {action?.id !== b.id && (
+                          <span className="row-actions">
+                            {inWindow && <button className="ok" onClick={() => startAction(b.id, "confirm")}>ยืนยันการมาถึง</button>}
+                            <button onClick={() => startAction(b.id, "cancel")}>ยกเลิก</button>
+                          </span>
+                        )}
                       </div>
-                    )}
-                    {cancelingId === b.id && cancelError && <div className="err" style={{ marginTop: 6 }}>{cancelError}</div>}
-                  </div>
-                ))}
+                      <div className={`status-line ${b.confirmed ? "ok" : inWindow ? "warn" : ""}`}>
+                        {b.confirmed
+                          ? "✓ ยืนยันการมาถึงแล้ว"
+                          : inWindow
+                          ? `รอยืนยัน — เหลือเวลา ${minsLeft} นาที`
+                          : now < st
+                          ? `ยืนยันได้เมื่อถึงเวลา ${b.start} (ภายใน ${GRACE_MIN} นาที)`
+                          : ""}
+                      </div>
+                      {action?.id === b.id && (
+                        <div className="cancel-inline">
+                          <input
+                            type="text"
+                            placeholder="ใส่รหัสนิสิตที่ใช้ตอนจอง"
+                            value={actionCode}
+                            onChange={(e) => setActionCode(e.target.value)}
+                          />
+                          <button
+                            className={action.type === "cancel" ? "go" : "ok-go"}
+                            onClick={() => (action.type === "cancel" ? doCancel(b) : doConfirm(b))}
+                          >
+                            {action.type === "cancel" ? "ยืนยันยกเลิก" : "ยืนยันการมาถึง"}
+                          </button>
+                          <button className="no" onClick={() => { setAction(null); setActionError(""); }}>ปิด</button>
+                        </div>
+                      )}
+                      {action?.id === b.id && actionError && <div className="err" style={{ marginTop: 6 }}>{actionError}</div>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -6,9 +6,9 @@ import { supabase } from "./supabaseClient";
 --------------------------------------------------------- */
 const ITEMS = [
   { id: "sofa-3", label: "โซฟาเล็ก", num: "3", type: "sofa", c: [1, 3], r: [4, 6] },
-  { id: "sofa-2", label: "โซฟาเล็ก", num: "2", type: "sofa", c: [1, 3], r: [6, 8] },
-  { id: "sofa-1", label: "โซฟาเล็ก", num: "1", type: "sofa", c: [1, 3], r: [8, 10] },
-  { id: "sofa-4", label: "โซฟาเล็ก", num: "4", type: "sofa", c: [3, 4], r: [11, 12] },
+  { id: "sofa-2", label: "โซฟาเล็ก", num: "2", type: "sofa", c: [1, 3], r: [7, 9] },
+  { id: "sofa-1", label: "โซฟาเล็ก", num: "1", type: "sofa", c: [1, 3], r: [10, 12] },
+  { id: "sofa-4", label: "โซฟาเล็ก", num: "4", type: "sofa", c: [3, 4], r: [12, 13] },
   { id: "sofa-big", label: "โซฟาใหญ่", num: "", type: "sofa", c: [1, 4], r: [13, 15] },
 
   { id: "round-8", label: "โต๊ะกลม", num: "8", type: "round", c: [4, 5], r: [3, 4] },
@@ -20,25 +20,25 @@ const ITEMS = [
   { id: "round-2", label: "โต๊ะกลม", num: "2", type: "round", c: [4, 5], r: [9, 10] },
   { id: "round-1", label: "โต๊ะกลม", num: "1", type: "round", c: [4, 5], r: [10, 11] },
 
-  { id: "small-9", label: "โต๊ะเล็ก", num: "9", type: "small", c: [5, 6], r: [4, 5] },
-  { id: "small-10", label: "โต๊ะเล็ก", num: "10", type: "small", c: [6, 7], r: [4, 5] },
-  { id: "small-7", label: "โต๊ะเล็ก", num: "7", type: "small", c: [5, 6], r: [5, 6] },
-  { id: "small-8", label: "โต๊ะเล็ก", num: "8", type: "small", c: [6, 7], r: [5, 6] },
-  { id: "small-5", label: "โต๊ะเล็ก", num: "5", type: "small", c: [5, 6], r: [6, 7] },
-  { id: "small-6", label: "โต๊ะเล็ก", num: "6", type: "small", c: [6, 7], r: [6, 7] },
-  { id: "small-3", label: "โต๊ะเล็ก", num: "3", type: "small", c: [5, 6], r: [7, 8] },
-  { id: "small-4", label: "โต๊ะเล็ก", num: "4", type: "small", c: [6, 7], r: [7, 8] },
-  { id: "small-2", label: "โต๊ะเล็ก", num: "2", type: "small", c: [5, 6], r: [10, 11] },
-  { id: "small-1", label: "โต๊ะเล็ก", num: "1", type: "small", c: [5, 6], r: [11, 12] },
-  { id: "small-11", label: "โต๊ะเล็ก", num: "11", type: "small", c: [8, 9], r: [9, 10] },
-  { id: "small-12", label: "โต๊ะเล็ก", num: "12", type: "small", c: [9, 10], r: [9, 10] },
-  { id: "small-13", label: "โต๊ะเล็ก", num: "13", type: "small", c: [10, 11], r: [9, 10] },
+  { id: "small-9", label: "โต๊ะเล็ก", num: "9", type: "small", c: [5, 6], r: [5, 6] },
+  { id: "small-10", label: "โต๊ะเล็ก", num: "10", type: "small", c: [6, 7], r: [5, 6] },
+  { id: "small-7", label: "โต๊ะเล็ก", num: "7", type: "small", c: [5, 6], r: [6, 7] },
+  { id: "small-8", label: "โต๊ะเล็ก", num: "8", type: "small", c: [6, 7], r: [6, 7] },
+  { id: "small-5", label: "โต๊ะเล็ก", num: "5", type: "small", c: [5, 6], r: [7, 8] },
+  { id: "small-6", label: "โต๊ะเล็ก", num: "6", type: "small", c: [6, 7], r: [7, 8] },
+  { id: "small-3", label: "โต๊ะเล็ก", num: "3", type: "small", c: [5, 6], r: [8, 9] },
+  { id: "small-4", label: "โต๊ะเล็ก", num: "4", type: "small", c: [6, 7], r: [8, 9] },
+  { id: "small-2", label: "โต๊ะเล็ก", num: "2", type: "small", c: [6, 7], r: [9, 10] },
+  { id: "small-1", label: "โต๊ะเล็ก", num: "1", type: "small", c: [5, 6], r: [9, 10] },
+  { id: "small-11", label: "โต๊ะเล็ก", num: "11", type: "small", c: [5, 6], r: [3, 4] },
+  { id: "small-12", label: "โต๊ะเล็ก", num: "12", type: "small", c: [6, 7], r: [3, 4] },
+  { id: "small-13", label: "โต๊ะเล็ก", num: "13", type: "small", c: [8, 9], r: [9, 10] },
 
   { id: "middle-2", label: "โต๊ะกลาง", num: "2", type: "middle", c: [8, 9], r: [5, 7] },
   { id: "middle-1", label: "โต๊ะกลาง", num: "1", type: "middle", c: [8, 9], r: [7, 9] },
 
   { id: "big-2", label: "โต๊ะใหญ่", num: "2", type: "big", c: [10, 12], r: [1, 4] },
-  { id: "big-1", label: "โต๊ะใหญ่", num: "1", type: "big", c: [7, 9], r: [13, 15] },
+  { id: "big-1", label: "โต๊ะใหญ่", num: "1", type: "big", c: [7, 9], r: [12, 15] },
 
   { id: "bar-14", label: "บาร์", num: "14", type: "bar", c: [13, 14], r: [1, 2] },
   { id: "bar-13", label: "บาร์", num: "13", type: "bar", c: [13, 14], r: [2, 3] },
@@ -52,16 +52,16 @@ const ITEMS = [
   { id: "bar-5", label: "บาร์", num: "5", type: "bar", c: [13, 14], r: [10, 11] },
   { id: "bar-4", label: "บาร์", num: "4", type: "bar", c: [13, 14], r: [11, 12] },
   { id: "bar-3", label: "บาร์", num: "3", type: "bar", c: [13, 14], r: [12, 13] },
-  { id: "bar-1", label: "บาร์", num: "1", type: "bar", c: [10, 11], r: [11, 12] },
-  { id: "bar-2", label: "บาร์", num: "2", type: "bar", c: [11, 12], r: [11, 12] },
+  { id: "bar-1", label: "บาร์", num: "1", type: "bar", c: [10, 11], r: [12, 13] },
+  { id: "bar-2", label: "บาร์", num: "2", type: "bar", c: [11, 12], r: [12, 13] },
 ];
 
 const LANDMARKS = [
   { id: "lm-room", label: "ห้องโสมสรนิสิต", c: [2, 9], r: [1, 2] },
-  { id: "lm-bath", label: "ห้องน้ำ", c: [10, 13], r: [12, 15] },
+  { id: "lm-bath", label: "ห้องน้ำ", c: [10, 13], r: [13, 15] },
   { id: "lm-door1", label: "ประตู 1", c: [5, 7], r: [15, 16] },
   { id: "lm-door2", label: "ประตู 2", c: [13, 14], r: [13, 15] },
-  { id: "lm-door3", label: "ประตู 3", c: [1, 2], r: [1, 3] },
+  { id: "lm-door3", label: "ประตู 3", c: [1, 2], r: [2, 4] },
 ];
 
 const HELP_STEPS = [

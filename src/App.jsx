@@ -64,6 +64,35 @@ const LANDMARKS = [
   { id: "lm-door3", label: "ประตู 3", c: [1, 2], r: [1, 3] },
 ];
 
+const HELP_STEPS = [
+  {
+    title: "เลือกวันที่",
+    body: "ที่ด้านบนของหน้า “ผังที่นั่ง” เลือกวันที่ต้องการจอง (ถ้าไม่เลือก ระบบจะใช้วันนี้)",
+  },
+  {
+    title: "เลือกที่นั่ง",
+    body: "กดที่โต๊ะ โซฟา หรือบาร์ที่ต้องการในผัง ถ้าใช้มือถือ เลื่อนผังไปทางซ้าย-ขวาได้ หรือสลับไปแท็บ “รายการจอง” เพื่อเลือกจากรายการแทน",
+  },
+  {
+    title: "กรอกข้อมูลแล้วกดยืนยันการจอง",
+    body: "ตั้งเวลาเริ่มและเวลาสิ้นสุด ใส่ชื่อผู้จอง และรหัสนิสิต รหัสนิสิตนี้ใช้เป็นรหัสผ่านสำหรับยืนยันการมาถึงและยกเลิกการจอง โปรดจำไว้ แล้วกด “ยืนยันการจอง”",
+  },
+  {
+    title: "ยืนยันการมาถึงภายใน 10 นาที",
+    body: "เมื่อถึงเวลาจอง ให้ไปที่ห้อง เปิดเว็บ กดที่นั่งที่จองไว้ กด “ยืนยันการมาถึง” และใส่รหัสนิสิต ต้องทำภายใน 10 นาทีหลังเวลาเริ่ม ถ้าไม่ยืนยัน การจองจะถูกยกเลิกอัตโนมัติและคนอื่นจองต่อได้",
+  },
+  {
+    title: "ยกเลิกการจอง (ถ้าไปไม่ได้)",
+    body: "กดที่นั่งที่จองไว้ กด “ยกเลิก” และใส่รหัสนิสิตที่ใช้ตอนจอง ควรยกเลิกทุกครั้งที่ไปไม่ได้ เพื่อคืนที่นั่งให้คนอื่น",
+  },
+];
+
+const HELP_FAQ = [
+  { q: "จองซ้อนเวลากับคนอื่นได้ไหม", a: "ไม่ได้ ถ้าช่วงเวลาชนกับการจองที่มีอยู่ ระบบจะแจ้งเตือนและไม่บันทึกให้" },
+  { q: "ลืมรหัสนิสิตที่ใช้ตอนจอง", a: "ระบบไม่สามารถกู้รหัสให้ได้ กรุณาติดต่อผู้ดูแลระบบ" },
+  { q: "ที่นั่งเป็นสีแดงทั้งที่ไม่มีคนนั่ง", a: "อาจเป็นสถานะ “รอยืนยัน” คือมีคนจองไว้แล้วและกำลังอยู่ในช่วง 10 นาทีที่ต้องยืนยัน ถ้าไม่มีใครยืนยัน ที่นั่งจะกลับเป็นสีเขียวเอง" },
+];
+
 const TYPE_TH = { sofa: "โซฟา", round: "โต๊ะกลม", small: "โต๊ะเล็ก", middle: "โต๊ะกลาง", big: "โต๊ะใหญ่", bar: "บาร์" };
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -137,6 +166,21 @@ export default function App() {
   const [actionCode, setActionCode] = useState("");
   const [actionError, setActionError] = useState("");
   const reapRef = useRef(false);
+  const [tipSeen, setTipSeen] = useState(() => {
+    try {
+      return localStorage.getItem("polsci-tip-seen") === "1";
+    } catch (e) {
+      return true;
+    }
+  });
+  const dismissTip = () => {
+    setTipSeen(true);
+    try {
+      localStorage.setItem("polsci-tip-seen", "1");
+    } catch (e) {
+      /* ignore */
+    }
+  };
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -417,6 +461,25 @@ export default function App() {
         .status-line{font-size:11.5px; margin-top:3px; color:var(--muted);}
         .status-line.ok{color:var(--green-text);}
         .status-line.warn{color:var(--red-text);}
+        .tip-banner{ margin:12px 16px 0; background:var(--panel2); border:1px solid var(--brass); border-radius:10px;
+          padding:10px 12px; display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; font-size:13px; }
+        .tip-actions{display:flex; gap:6px;}
+        .tip-banner button{ border-radius:7px; font-size:12px; padding:6px 12px; cursor:pointer; font-weight:600; font-family:'Noto Sans Thai'; }
+        .tip-go{background:var(--brass); color:#fff; border:none;}
+        .tip-no{background:transparent; color:var(--muted); border:1px solid var(--line);}
+        .help-wrap{padding:16px; max-width:720px; margin:0 auto;}
+        .help-title{margin:4px 0 6px; font-size:20px; color:var(--ink);}
+        .help-lead{color:var(--muted); font-size:13px; margin:0 0 14px; line-height:1.55;}
+        .help-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px;}
+        .help-h{font-family:'Noto Serif Thai'; color:var(--brass); font-weight:600; font-size:14px; margin-bottom:8px;}
+        .help-legend{display:flex; align-items:flex-start; gap:8px; font-size:13px; margin:6px 0; line-height:1.5;}
+        .help-legend .sw{flex-shrink:0; margin-top:4px;}
+        .help-step{display:flex; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px;}
+        .help-num{flex:0 0 28px; height:28px; border-radius:50%; background:var(--brass); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-weight:600; font-size:13px;}
+        .help-step b, .help-faq b{display:block; font-size:14px; margin-bottom:2px;}
+        .help-step p, .help-faq p{margin:0; font-size:13px; line-height:1.6;}
+        .help-faq{padding:8px 0; border-bottom:1px dashed var(--line);}
+        .help-faq:last-child{border-bottom:none;}
         .btn{ width:100%; padding:12px; border-radius:10px; border:none; cursor:pointer;
           font-family:'Noto Sans Thai'; font-weight:700; font-size:14.5px; margin-top:16px; }
         .btn.primary{background:var(--brass); color:#fff;}
@@ -469,8 +532,19 @@ export default function App() {
           <button className={`tab-btn ${tab === "map" ? "active" : ""}`} onClick={() => setTab("map")}>ผังที่นั่ง</button>
           <button className={`tab-btn ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>รายการจอง</button>
           <button className={`tab-btn ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")}>สถิติ</button>
+          <button className={`tab-btn ${tab === "help" ? "active" : ""}`} onClick={() => setTab("help")}>วิธีใช้</button>
         </div>
       </div>
+
+      {tab === "map" && !tipSeen && (
+        <div className="tip-banner">
+          <span>ใช้งานครั้งแรก? อ่านวิธีใช้สั้นๆ ใช้เวลาไม่ถึง 1 นาที</span>
+          <span className="tip-actions">
+            <button className="tip-go" onClick={() => { setTab("help"); dismissTip(); }}>ดูวิธีใช้</button>
+            <button className="tip-no" onClick={dismissTip}>ปิด</button>
+          </span>
+        </div>
+      )}
 
       {(tab === "map" || tab === "list") && (
         <>
@@ -602,6 +676,41 @@ export default function App() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "help" && (
+        <div className="help-wrap">
+          <h2 className="help-title serif">วิธีใช้งานระบบจองที่นั่ง</h2>
+          <p className="help-lead">จองโต๊ะ โซฟา หรือที่นั่งบาร์ในห้องเอนกประสงค์ได้ในไม่กี่ขั้นตอน ไม่ต้องสมัครสมาชิก</p>
+
+          <div className="help-card">
+            <div className="help-h">สีของที่นั่งบอกอะไร</div>
+            <div className="help-legend"><span className="sw g" /> สีเขียว = ว่าง จองได้</div>
+            <div className="help-legend"><span className="sw r" /> สีแดง = มีคนใช้อยู่ตอนนี้ หรือเขียนว่า “รอยืนยัน” = จองไว้แล้ว รอผู้จองมายืนยัน</div>
+          </div>
+
+          {HELP_STEPS.map((st, i) => (
+            <div className="help-step" key={st.title}>
+              <div className="help-num">{i + 1}</div>
+              <div>
+                <b>{st.title}</b>
+                <p>{st.body}</p>
+              </div>
+            </div>
+          ))}
+
+          <div className="help-card">
+            <div className="help-h">คำถามที่พบบ่อย</div>
+            {HELP_FAQ.map((f) => (
+              <div className="help-faq" key={f.q}>
+                <b>{f.q}</b>
+                <p>{f.a}</p>
+              </div>
+            ))}
+          </div>
+
+          <button className="btn primary" onClick={() => setTab("map")}>ไปที่ผังที่นั่ง</button>
         </div>
       )}
 

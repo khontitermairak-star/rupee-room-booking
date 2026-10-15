@@ -57,7 +57,7 @@ const ITEMS = [
 ];
 
 const LANDMARKS = [
-  { id: "lm-room", label: "ห้องโสมสรนิสิต", c: [2, 9], r: [1, 2] },
+  { id: "lm-room", label: "สโมสรนิสิต", c: [2, 9], r: [1, 2] },
   { id: "lm-bath", label: "ห้องน้ำ", c: [10, 13], r: [13, 15] },
   { id: "lm-door1", label: "ประตู 1", c: [5, 7], r: [15, 16] },
   { id: "lm-door2", label: "ประตู 2", c: [13, 14], r: [13, 15] },

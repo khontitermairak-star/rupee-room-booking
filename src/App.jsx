@@ -75,7 +75,7 @@ const HELP_STEPS = [
   },
   {
     title: "กรอกข้อมูลแล้วกดยืนยันการจอง",
-    body: "ตั้งเวลาเริ่มและเวลาสิ้นสุด ใส่ชื่อผู้จอง และรหัสนิสิต รหัสนิสิตนี้ใช้เป็นรหัสผ่านสำหรับยืนยันการมาถึงและยกเลิกการจอง โปรดจำไว้ แล้วกด “ยืนยันการจอง” ระบบจะขึ้นข้อความเตือนให้ยืนยันอีกครั้งก่อนบันทึก",
+    body: "ตั้งเวลาเริ่มและเวลาสิ้นสุด (จองได้ครั้งละไม่เกิน 3 ชั่วโมง) ใส่ชื่อผู้จอง และรหัสนิสิต รหัสนิสิตนี้ใช้เป็นรหัสผ่านสำหรับยืนยันการมาถึงและยกเลิกการจอง โปรดจำไว้ แล้วกด “ยืนยันการจอง” ระบบจะขึ้นข้อความเตือนให้ยืนยันอีกครั้งก่อนบันทึก",
   },
   {
     title: "ยืนยันการมาถึงภายใน 10 นาที",
@@ -91,6 +91,10 @@ const HELP_FAQ = [
   {
     q: "ที่นั่งเป็นสีแดง ยังจองช่วงเวลาอื่นได้ไหม",
     a: "ได้ สีแดงบอกเฉพาะสถานะ “ตอนนี้” ว่ามีคนใช้อยู่ ไม่ได้แปลว่าจองไม่ได้ทั้งวัน กดที่นั่งสีแดงได้ตามปกติ ในหน้าต่างที่เปิดขึ้นจะมีรายการเวลาที่ถูกจองไว้แล้วของวันนั้น ให้เลือกเวลาเริ่มและเวลาสิ้นสุดที่ไม่ชนกับรายการเหล่านั้น หรือเปลี่ยนวันที่ที่ด้านบนของหน้าเพื่อจองวันอื่น ระบบจะไม่ให้จองเฉพาะช่วงเวลาที่ชนกับคนอื่นเท่านั้น",
+  },
+  {
+    q: "อยากใช้โต๊ะนานกว่า 3 ชั่วโมงทำอย่างไร",
+    a: "ระบบจำกัดการจองครั้งละไม่เกิน 3 ชั่วโมง เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน ถ้าต้องการใช้งานต่อ ให้จองอีกครั้งในช่วงเวลาถัดไป เช่น จอง 13:00–16:00 แล้วจองต่อ 16:00–19:00 และกดยืนยันการมาถึงอีกครั้งเมื่อเริ่มช่วงที่สอง",
   },
   { q: "จองซ้อนเวลากับคนอื่นได้ไหม", a: "ไม่ได้ ถ้าช่วงเวลาชนกับการจองที่มีอยู่ ระบบจะแจ้งเตือนและไม่บันทึกให้" },
   { q: "ลืมรหัสนิสิตที่ใช้ตอนจอง", a: "ระบบไม่สามารถกู้รหัสให้ได้ กรุณาติดต่อผู้ดูแลระบบ" },
@@ -115,6 +119,8 @@ const overlaps = (aS, aE, bS, bE) => toMin(aS) < toMin(bE) && toMin(bS) < toMin(
 const CLEAR_PASSWORD = "687786";
 // ต้องกดยืนยันการมาถึงภายในกี่นาทีหลังเวลาจองเริ่ม
 const GRACE_MIN = 10;
+// จองได้ครั้งละไม่เกินกี่ชั่วโมง (เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน)
+const MAX_BOOKING_HOURS = 3;
 const startDateOf = (b) => new Date(`${b.date}T${b.start}:00`);
 // เส้นตายการยืนยัน = เวลาเริ่มจอง (หรือเวลาที่กดจอง ถ้ากดจองหลังเวลาเริ่มไปแล้ว) + 10 นาที
 const deadlineOf = (b) =>
@@ -277,6 +283,8 @@ export default function App() {
     if (!form.name.trim()) return "กรุณาใส่ชื่อผู้จอง";
     if (!form.code.trim()) return "กรุณาใส่รหัสนิสิต (ใช้เป็นรหัสผ่านสำหรับยกเลิกภายหลัง)";
     if (toMin(form.end) <= toMin(form.start)) return "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น";
+    if (toMin(form.end) - toMin(form.start) > MAX_BOOKING_HOURS * 60)
+      return `จองได้ครั้งละไม่เกิน ${MAX_BOOKING_HOURS} ชั่วโมง ถ้าต้องการใช้งานต่อ ให้จองอีกครั้งในช่วงเวลาถัดไป`;
     const conflict = visibleBookings.find(
       (b) => b.itemId === selected.id && b.date === bookDate && overlaps(form.start, form.end, b.start, b.end)
     );
@@ -493,6 +501,8 @@ export default function App() {
         .warn-box{margin-top:12px; padding:10px 12px; background:var(--panel2); border:1px solid var(--brass); border-radius:10px; font-size:12.5px; line-height:1.6;}
         .warn-box b{display:block; color:var(--brass); margin-bottom:4px; font-size:13px;}
         .warn-box p{margin:4px 0 0;}
+        .fair-note{margin-top:8px; font-size:11.5px; color:var(--muted); line-height:1.55;}
+        .fair-note.over{color:var(--red-text); font-weight:600;}
         .info-box{margin:0 0 12px; padding:8px 10px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; font-size:12px; line-height:1.55; color:var(--ink);}
         .tip-banner{ margin:12px 16px 0; background:var(--panel2); border:1px solid var(--brass); border-radius:10px;
           padding:10px 12px; display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; font-size:13px; }
@@ -770,6 +780,10 @@ export default function App() {
                 <span className="field-label">เวลาสิ้นสุด</span>
                 <input className="full" type="time" value={form.end} onChange={(e) => setForm((f) => ({ ...f, end: e.target.value }))} />
               </label>
+            </div>
+
+            <div className={`fair-note ${toMin(form.end) - toMin(form.start) > MAX_BOOKING_HOURS * 60 ? "over" : ""}`}>
+              จองได้ครั้งละไม่เกิน {MAX_BOOKING_HOURS} ชั่วโมง เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน หากต้องการใช้งานต่อ ให้จองอีกครั้งในช่วงเวลาถัดไป
             </div>
 
             <label>

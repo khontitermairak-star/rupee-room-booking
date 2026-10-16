@@ -121,6 +121,9 @@ const CLEAR_PASSWORD = "687786";
 const GRACE_MIN = 10;
 // จองได้ครั้งละไม่เกินกี่ชั่วโมง (เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน)
 const MAX_BOOKING_HOURS = 3;
+// ลิงก์แบบประเมินเว็บไซต์ (Google Form) ที่จะเด้งขึ้นหลังจองสำเร็จ
+const SURVEY_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSeiZw51sslKJnZQ74i_kkuXizWIM02ZV3gj4kRCdiXOm9-zcQ/viewform?usp=dialog";
 const startDateOf = (b) => new Date(`${b.date}T${b.start}:00`);
 // เส้นตายการยืนยัน = เวลาเริ่มจอง (หรือเวลาที่กดจอง ถ้ากดจองหลังเวลาเริ่มไปแล้ว) + 10 นาที
 const deadlineOf = (b) =>
@@ -176,6 +179,7 @@ export default function App() {
   const [actionCode, setActionCode] = useState("");
   const [actionError, setActionError] = useState("");
   const [confirmStep, setConfirmStep] = useState(false);
+  const [success, setSuccess] = useState(null); // ข้อมูลการจองที่เพิ่งสำเร็จ (ใช้แสดงป๊อปอัป)
   const reapRef = useRef(false);
   const [tipSeen, setTipSeen] = useState(() => {
     try {
@@ -330,8 +334,7 @@ export default function App() {
       return;
     }
     await load();
-    setToast(`จอง${itemLabel} สำเร็จ`);
-    setTimeout(() => setToast(""), 2500);
+    setSuccess({ label: itemLabel, date: bookDate, start: form.start, end: form.end });
     closeModal();
   };
 
@@ -503,6 +506,10 @@ export default function App() {
         .warn-box p{margin:4px 0 0;}
         .fair-note{margin-top:8px; font-size:11.5px; color:var(--muted); line-height:1.55;}
         .fair-note.over{color:var(--red-text); font-weight:600;}
+        .survey-box{margin-top:12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); font-size:12.5px; line-height:1.6;}
+        .survey-box b{display:block; font-size:13px; margin-bottom:2px;}
+        .survey-box p{margin:0;}
+        .linkbtn{display:block; text-align:center; text-decoration:none;}
         .info-box{margin:0 0 12px; padding:8px 10px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; font-size:12px; line-height:1.55; color:var(--ink);}
         .tip-banner{ margin:12px 16px 0; background:var(--panel2); border:1px solid var(--brass); border-radius:10px;
           padding:10px 12px; display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; font-size:13px; }
@@ -872,6 +879,30 @@ export default function App() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {success && (
+        <div className="modal-overlay" onClick={() => setSuccess(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>จองสำเร็จ</h3>
+            <div className="sub">{success.label} · {fmtDate(success.date)} · {success.start}–{success.end} น.</div>
+
+            <div className="warn-box" style={{ marginTop: 0 }}>
+              <b>อย่าลืมยืนยันการมาถึง</b>
+              <p>เมื่อมาถึงโต๊ะ กด “ยืนยันการมาถึง” ภายใน {GRACE_MIN} นาทีหลังเวลาเริ่ม (ใช้รหัสนิสิตที่กรอกไว้) ไม่เช่นนั้นการจองจะถูกยกเลิกอัตโนมัติ</p>
+            </div>
+
+            <div className="survey-box">
+              <b>ช่วยประเมินเว็บไซต์ให้เราหน่อย</b>
+              <p>ความคิดเห็นของคุณช่วยให้เราพัฒนาระบบจองให้ดีขึ้น ใช้เวลาไม่ถึง 1 นาที</p>
+            </div>
+
+            <a className="btn primary linkbtn" href={SURVEY_URL} target="_blank" rel="noopener noreferrer" onClick={() => setSuccess(null)}>
+              ทำแบบประเมินเว็บไซต์
+            </a>
+            <button className="btn ghost" onClick={() => setSuccess(null)}>ไว้ทีหลัง</button>
           </div>
         </div>
       )}

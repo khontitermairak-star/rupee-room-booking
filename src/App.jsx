@@ -82,8 +82,8 @@ const HELP_STEPS = [
     body: "เมื่อถึงเวลาจอง ให้ไปที่ห้อง เปิดเว็บ กดที่นั่งที่จองไว้ กด “ยืนยันการมาถึง” และใส่รหัสนิสิต ต้องทำภายใน 10 นาทีหลังเวลาเริ่ม ถ้าไม่ยืนยัน การจองจะถูกยกเลิกอัตโนมัติและคนอื่นจองต่อได้",
   },
   {
-    title: "ยกเลิกการจอง (ถ้าไปไม่ได้)",
-    body: "กดที่นั่งที่จองไว้ กด “ยกเลิก” และใส่รหัสนิสิตที่ใช้ตอนจอง ควรยกเลิกทุกครั้งที่ไปไม่ได้ เพื่อคืนที่นั่งให้คนอื่น",
+    title: "ยกเลิกการจอง (ถ้าไปไม่ได้ หรือใช้เสร็จก่อนเวลา)",
+    body: "กดที่นั่งที่จองไว้ กด “ยกเลิก” และใส่รหัสนิสิตที่ใช้ตอนจอง ควรยกเลิกทุกครั้งที่ไปไม่ได้ หรือใช้งานเสร็จก่อนเวลา เพื่อคืนที่นั่งให้คนอื่นใช้ต่อ",
   },
 ];
 
@@ -95,6 +95,10 @@ const HELP_FAQ = [
   {
     q: "อยากใช้โต๊ะนานกว่า 3 ชั่วโมงทำอย่างไร",
     a: "ระบบจำกัดการจองครั้งละไม่เกิน 3 ชั่วโมง เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน ถ้าต้องการใช้งานต่อ ให้จองอีกครั้งในช่วงเวลาถัดไป เช่น จอง 13:00–16:00 แล้วจองต่อ 16:00–19:00 และกดยืนยันการมาถึงอีกครั้งเมื่อเริ่มช่วงที่สอง",
+  },
+  {
+    q: "ใช้งานเสร็จก่อนเวลาที่จองไว้ ต้องทำอย่างไร",
+    a: "กดที่นั่งที่จองไว้ กด “ยกเลิก” แล้วใส่รหัสนิสิตที่ใช้ตอนจอง ที่นั่งจะกลับเป็นสีเขียวทันที คนอื่นจะได้ใช้ต่อ",
   },
   { q: "จองซ้อนเวลากับคนอื่นได้ไหม", a: "ไม่ได้ ถ้าช่วงเวลาชนกับการจองที่มีอยู่ ระบบจะแจ้งเตือนและไม่บันทึกให้" },
   { q: "ลืมรหัสนิสิตที่ใช้ตอนจอง", a: "ระบบไม่สามารถกู้รหัสให้ได้ กรุณาติดต่อผู้ดูแลระบบ" },
@@ -115,12 +119,15 @@ const toMin = (hm) => {
 };
 const overlaps = (aS, aE, bS, bE) => toMin(aS) < toMin(bE) && toMin(bS) < toMin(aE);
 
-// รหัสผ่านผู้ดูแลสำหรับปุ่ม "ล้างข้อมูลการจองทั้งหมด" (แก้เปลี่ยนได้ที่บรรทัดนี้)
-const CLEAR_PASSWORD = "687786";
+// รหัสผ่านผู้ดูแล ใช้ได้ 2 อย่าง: ล้างข้อมูลการจองทั้งหมด และยกเลิกการจองของคนอื่น (แก้เปลี่ยนได้ที่บรรทัดนี้)
+const ADMIN_PASSWORD = "687786";
 // ต้องกดยืนยันการมาถึงภายในกี่นาทีหลังเวลาจองเริ่ม
 const GRACE_MIN = 10;
 // จองได้ครั้งละไม่เกินกี่ชั่วโมง (เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน)
 const MAX_BOOKING_HOURS = 3;
+// ปิดเว็บชั่วคราว: เปลี่ยนเป็น true แล้ว Commit + Push เพื่อปิด / เปลี่ยนกลับเป็น false แล้ว Push เพื่อเปิดอีกครั้ง
+const SITE_CLOSED = false;
+const CLOSED_MESSAGE = "ระบบจองที่นั่งปิดให้บริการชั่วคราว ขออภัยในความไม่สะดวก";
 // ลิงก์แบบประเมินเว็บไซต์ (Google Form) ที่จะเด้งขึ้นหลังจองสำเร็จ
 const SURVEY_URL =
   "https://docs.google.com/forms/d/e/1FAIpQLSeiZw51sslKJnZQ74i_kkuXizWIM02ZV3gj4kRCdiXOm9-zcQ/viewform?usp=dialog";
@@ -204,6 +211,7 @@ export default function App() {
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
+    if (SITE_CLOSED) return;
     const { data, error } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
     if (error) {
       setDbOk(false);
@@ -346,12 +354,13 @@ export default function App() {
 
   const doCancel = async (booking) => {
     if (!actionCode.trim()) return setActionError("กรุณาใส่รหัสนิสิตที่ใช้ตอนจอง");
-    if (actionCode.trim() !== booking.code) return setActionError("รหัสไม่ถูกต้อง");
+    const isAdmin = actionCode.trim() === ADMIN_PASSWORD;
+    if (!isAdmin && actionCode.trim() !== booking.code) return setActionError("รหัสไม่ถูกต้อง");
     await supabase.from("bookings").delete().eq("id", booking.id);
     await load();
     setAction(null);
     setActionCode("");
-    setToast("ยกเลิกการจองแล้ว");
+    setToast(isAdmin ? "ผู้ดูแลยกเลิกการจองแล้ว" : "ยกเลิกการจองแล้ว");
     setTimeout(() => setToast(""), 2000);
   };
 
@@ -371,7 +380,7 @@ export default function App() {
   };
 
   const clearAll = async () => {
-    if (clearPassword !== CLEAR_PASSWORD) return setClearError("รหัสผ่านไม่ถูกต้อง");
+    if (clearPassword !== ADMIN_PASSWORD) return setClearError("รหัสผ่านไม่ถูกต้อง");
     await supabase.from("bookings").delete().neq("id", "__none__");
     await load();
     setConfirmClear(false);
@@ -406,6 +415,29 @@ export default function App() {
   }, [visibleBookings, todayNow]);
 
   const liveFreeCount = ITEMS.length - ITEMS.filter((it) => liveBookingFor(it.id)).length;
+
+  if (SITE_CLOSED) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#FBF7EE",
+          color: "#2E2A22",
+          fontFamily: "'Noto Sans Thai', sans-serif",
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>ปิดให้บริการชั่วคราว</h1>
+          <p style={{ margin: 0, color: "#8C8170", lineHeight: 1.6 }}>{CLOSED_MESSAGE}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -816,6 +848,7 @@ export default function App() {
                 <b>ก่อนยืนยันการจอง โปรดทราบ</b>
                 <p>จอง {selected.label} {selected.num} วันที่ {fmtDate(bookDate)} เวลา {form.start}–{form.end} น. ในชื่อ {form.name.trim()}</p>
                 <p>เมื่อมาถึงโต๊ะ ต้องกดปุ่ม “ยืนยันการมาถึง” ภายใน {GRACE_MIN} นาทีหลังเวลาเริ่ม (ใช้รหัสนิสิตที่กรอกไว้) ไม่เช่นนั้นการจองจะถูกยกเลิกอัตโนมัติ</p>
+                <p>ถ้าใช้งานเสร็จก่อนเวลา หรือไปไม่ได้ กดที่นั่งแล้วกด “ยกเลิก” เพื่อคืนที่นั่งให้คนอื่นได้</p>
               </div>
             )}
 
@@ -860,7 +893,7 @@ export default function App() {
                         <div className="cancel-inline">
                           <input
                             type="text"
-                            placeholder="ใส่รหัสนิสิตที่ใช้ตอนจอง"
+                            placeholder={action.type === "cancel" ? "รหัสนิสิตที่ใช้ตอนจอง (หรือรหัสผู้ดูแล)" : "ใส่รหัสนิสิตที่ใช้ตอนจอง"}
                             value={actionCode}
                             onChange={(e) => setActionCode(e.target.value)}
                           />
@@ -892,6 +925,7 @@ export default function App() {
             <div className="warn-box" style={{ marginTop: 0 }}>
               <b>อย่าลืมยืนยันการมาถึง</b>
               <p>เมื่อมาถึงโต๊ะ กด “ยืนยันการมาถึง” ภายใน {GRACE_MIN} นาทีหลังเวลาเริ่ม (ใช้รหัสนิสิตที่กรอกไว้) ไม่เช่นนั้นการจองจะถูกยกเลิกอัตโนมัติ</p>
+              <p>ถ้าใช้งานเสร็จก่อนเวลา หรือไปไม่ได้ กดที่นั่งแล้วกด “ยกเลิก” เพื่อคืนที่นั่งให้คนอื่นได้</p>
             </div>
 
             <div className="survey-box">

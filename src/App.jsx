@@ -93,6 +93,10 @@ const HELP_FAQ = [
     a: "ได้ สีแดงบอกเฉพาะสถานะ “ตอนนี้” ว่ามีคนใช้อยู่ ไม่ได้แปลว่าจองไม่ได้ทั้งวัน กดที่นั่งสีแดงได้ตามปกติ ในหน้าต่างที่เปิดขึ้นจะมีรายการเวลาที่ถูกจองไว้แล้วของวันนั้น ให้เลือกเวลาเริ่มและเวลาสิ้นสุดที่ไม่ชนกับรายการเหล่านั้น หรือเปลี่ยนวันที่ที่ด้านบนของหน้าเพื่อจองวันอื่น ระบบจะไม่ให้จองเฉพาะช่วงเวลาที่ชนกับคนอื่นเท่านั้น",
   },
   {
+    q: "มีการแจ้งเตือนบนมือถือไหม",
+    a: "ถ้าเปิดเว็บค้างไว้ในเครื่องที่ใช้จอง จะมีแถบเตือนก่อนถึงคิว 10 นาที และตอนถึงเวลาจะเตือนให้กดยืนยันการมาถึง หากต้องการให้มือถือเตือนแม้ปิดเว็บไปแล้ว ให้กด “เพิ่มลงปฏิทินมือถือ” ในหน้าต่างที่ขึ้นหลังจองสำเร็จ",
+  },
+  {
     q: "อยากใช้โต๊ะนานกว่า 3 ชั่วโมงทำอย่างไร",
     a: "ระบบจำกัดการจองครั้งละไม่เกิน 3 ชั่วโมง เพื่อให้ทุกคนได้ใช้โต๊ะอย่างเท่าเทียมกัน ถ้าต้องการใช้งานต่อ ให้จองอีกครั้งในช่วงเวลาถัดไป เช่น จอง 13:00–16:00 แล้วจองต่อ 16:00–19:00 และกดยืนยันการมาถึงอีกครั้งเมื่อเริ่มช่วงที่สอง",
   },
@@ -136,6 +140,63 @@ const startDateOf = (b) => new Date(`${b.date}T${b.start}:00`);
 const deadlineOf = (b) =>
   new Date(Math.max(startDateOf(b).getTime(), new Date(b.createdAt).getTime()) + GRACE_MIN * 60000);
 const isExpired = (b, nowDate) => !b.confirmed && nowDate > deadlineOf(b);
+
+// เตือนล่วงหน้ากี่นาทีก่อนถึงคิว
+const REMIND_MIN = 10;
+
+// ===ICS-START=== สร้างไฟล์ปฏิทิน (.ics) พร้อมเตือน 2 ครั้ง: ก่อนถึงคิว 10 นาที และตอนถึงเวลา
+const icsText = (t) => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const icsLocal = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+const buildIcs = (b, origin) => {
+  const st = new Date(`${b.date}T${b.start}:00`);
+  const en = new Date(`${b.date}T${b.end}:00`);
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Polsci Multi Room//TH",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${b.id}@polsci-multi-room`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${icsLocal(st)}`,
+    `DTEND:${icsLocal(en)}`,
+    "SUMMARY:" + icsText(`จองโต๊ะ ${b.itemLabel}`),
+    "LOCATION:" + icsText("ห้องเอนกประสงค์ คณะรัฐศาสตร์ ม.บูรพา"),
+    "DESCRIPTION:" + icsText(`อย่าลืมกดยืนยันการมาถึงที่เว็บภายใน ${GRACE_MIN} นาทีหลังเวลาเริ่ม ${origin}`),
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:" + icsText(`อีก ${REMIND_MIN} นาทีถึงคิวของคุณ`),
+    `TRIGGER:-PT${REMIND_MIN}M`,
+    "END:VALARM",
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:" + icsText("ถึงเวลาแล้ว อย่าลืมยืนยันการมาถึง"),
+    "TRIGGER:PT0M",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  return lines.join("\r\n") + "\r\n";
+};
+// ===ICS-END===
+
+const downloadIcs = (b) => {
+  try {
+    const blob = new Blob([buildIcs(b, window.location.origin)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "polsci-booking.ics";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) {
+    /* ignore */
+  }
+};
 const fmtDate = (iso) => {
   const d = new Date(iso + "T00:00:00");
   const days = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
@@ -187,6 +248,16 @@ export default function App() {
   const [actionError, setActionError] = useState("");
   const [confirmStep, setConfirmStep] = useState(false);
   const [success, setSuccess] = useState(null); // ข้อมูลการจองที่เพิ่งสำเร็จ (ใช้แสดงป๊อปอัป)
+  // รหัสการจองที่ทำจากเครื่องนี้ (เก็บในเครื่อง) ใช้ตัดสินว่าจะเตือนใคร
+  const [myIds, setMyIds] = useState(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("polsci-my-bookings") || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [dismissedKey, setDismissedKey] = useState("");
   const reapRef = useRef(false);
   const [tipSeen, setTipSeen] = useState(() => {
     try {
@@ -323,8 +394,9 @@ export default function App() {
 
     setBusy(true);
     const itemLabel = `${selected.label}${selected.num ? " " + selected.num : ""}`;
+    const newId = uid();
     const { error } = await supabase.from("bookings").insert({
-      id: uid(),
+      id: newId,
       item_id: selected.id,
       item_label: itemLabel,
       item_type: selected.type,
@@ -342,7 +414,14 @@ export default function App() {
       return;
     }
     await load();
-    setSuccess({ label: itemLabel, date: bookDate, start: form.start, end: form.end });
+    const nextIds = [...myIds, newId].slice(-50);
+    setMyIds(nextIds);
+    try {
+      localStorage.setItem("polsci-my-bookings", JSON.stringify(nextIds));
+    } catch (e) {
+      /* ignore */
+    }
+    setSuccess({ id: newId, itemLabel, label: itemLabel, date: bookDate, start: form.start, end: form.end });
     closeModal();
   };
 
@@ -413,6 +492,40 @@ export default function App() {
       maxItem: topItems.length ? topItems[0][1] : 1,
     };
   }, [visibleBookings, todayNow]);
+
+  // เตือนการจองที่ทำจากเครื่องนี้: ก่อนถึงคิว 10 นาที และเมื่อถึงเวลาให้ยืนยันการมาถึง
+  const reminder = useMemo(() => {
+    const mine = visibleBookings.filter((b) => myIds.includes(b.id));
+    for (const b of mine) {
+      if (!b.confirmed && now >= startDateOf(b) && now <= deadlineOf(b)) {
+        return { kind: "arrive", b, minsLeft: Math.max(0, Math.ceil((deadlineOf(b) - now) / 60000)) };
+      }
+    }
+    for (const b of mine) {
+      const diff = startDateOf(b) - now;
+      if (diff > 0 && diff <= REMIND_MIN * 60000) return { kind: "soon", b, mins: Math.ceil(diff / 60000) };
+    }
+    return null;
+  }, [visibleBookings, myIds, now]);
+  const reminderKey = reminder ? `${reminder.kind}-${reminder.b.id}` : "";
+
+  // สั่นเครื่องเบาๆ เมื่อมีการเตือนใหม่ (ใช้ได้เฉพาะเบราว์เซอร์ที่รองรับ)
+  useEffect(() => {
+    if (!reminderKey) return;
+    try {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    } catch (e) {
+      /* ignore */
+    }
+  }, [reminderKey]);
+
+  const openReminderSeat = (b) => {
+    const it = ITEMS.find((i) => i.id === b.itemId);
+    if (!it) return;
+    setBookDate(b.date);
+    openItem(it);
+    setAction({ id: b.id, type: "confirm" });
+  };
 
   const liveFreeCount = ITEMS.length - ITEMS.filter((it) => liveBookingFor(it.id)).length;
 
@@ -541,6 +654,14 @@ export default function App() {
         .survey-box{margin-top:12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); font-size:12.5px; line-height:1.6;}
         .survey-box b{display:block; font-size:13px; margin-bottom:2px;}
         .survey-box p{margin:0;}
+        .remind-banner{ margin:12px 16px 0; border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; font-size:13px; line-height:1.5; border:1px solid var(--brass); background:var(--panel2); }
+        .remind-banner.arrive{ border-color:var(--red); background:var(--red-bg); }
+        .remind-banner b{display:block; font-size:14px;}
+        .rm-sub{color:var(--muted); font-size:12px;}
+        .remind-actions{display:flex; gap:6px;}
+        .remind-banner button{ border-radius:7px; font-size:12px; padding:6px 12px; cursor:pointer; font-weight:600; font-family:'Noto Sans Thai'; }
+        .rm-go{background:var(--brass); color:#fff; border:none;}
+        .rm-no{background:transparent; color:var(--muted); border:1px solid var(--line);}
         .linkbtn{display:block; text-align:center; text-decoration:none;}
         .info-box{margin:0 0 12px; padding:8px 10px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; font-size:12px; line-height:1.55; color:var(--ink);}
         .tip-banner{ margin:12px 16px 0; background:var(--panel2); border:1px solid var(--brass); border-radius:10px;
@@ -618,6 +739,22 @@ export default function App() {
           <button className={`tab-btn ${tab === "help" ? "active" : ""}`} onClick={() => setTab("help")}>วิธีใช้</button>
         </div>
       </div>
+
+      {reminder && dismissedKey !== reminderKey && (
+        <div className={`remind-banner ${reminder.kind}`}>
+          <div>
+            <b>{reminder.kind === "soon" ? `อีก ${reminder.mins} นาทีถึงคิวของคุณ` : "ถึงเวลาแล้ว อย่าลืมยืนยันการมาถึง"}</b>
+            <span className="rm-sub">
+              {reminder.b.itemLabel} · {reminder.b.start}–{reminder.b.end} น.
+              {reminder.kind === "arrive" ? ` · เหลือเวลา ${reminder.minsLeft} นาที` : ""}
+            </span>
+          </div>
+          <div className="remind-actions">
+            {reminder.kind === "arrive" && <button className="rm-go" onClick={() => openReminderSeat(reminder.b)}>ยืนยันการมาถึง</button>}
+            <button className="rm-no" onClick={() => setDismissedKey(reminderKey)}>ปิด</button>
+          </div>
+        </div>
+      )}
 
       {tab === "map" && !tipSeen && (
         <div className="tip-banner">
@@ -927,6 +1064,12 @@ export default function App() {
               <p>เมื่อมาถึงโต๊ะ กด “ยืนยันการมาถึง” ภายใน {GRACE_MIN} นาทีหลังเวลาเริ่ม (ใช้รหัสนิสิตที่กรอกไว้) ไม่เช่นนั้นการจองจะถูกยกเลิกอัตโนมัติ</p>
               <p>ถ้าใช้งานเสร็จก่อนเวลา หรือไปไม่ได้ กดที่นั่งแล้วกด “ยกเลิก” เพื่อคืนที่นั่งให้คนอื่นได้</p>
             </div>
+
+            <div className="survey-box">
+              <b>ให้มือถือเตือนล่วงหน้า</b>
+              <p>เพิ่มลงปฏิทินเพื่อให้มือถือเตือน “อีก {REMIND_MIN} นาทีถึงคิวของคุณ” และตอนถึงเวลา แม้ปิดเว็บไปแล้ว</p>
+            </div>
+            <button className="btn ghost" onClick={() => downloadIcs(success)}>เพิ่มลงปฏิทินมือถือ</button>
 
             <div className="survey-box">
               <b>ช่วยประเมินเว็บไซต์ให้เราหน่อย</b>
